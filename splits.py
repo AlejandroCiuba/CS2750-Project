@@ -19,6 +19,8 @@ def partition(data: pd.DataFrame, folds: int, column: str, seed: int, bootstrap:
     logging.info(f"Samples per first {folds - 1} folds: {spf}")
     logging.info(f"Samples per fold {folds}: {rem}")
 
+    full_folds = pd.DataFrame(columns=list(data.columns).append(column))
+
     for i in tqdm(range(folds), desc="Sampling folds..."):
 
         # Get samples for the fold
@@ -26,10 +28,15 @@ def partition(data: pd.DataFrame, folds: int, column: str, seed: int, bootstrap:
         data.drop(index=sample.index, inplace=True)
 
         # Add column for the fold
-        sample[column] = pd.Series(data=[i for _ in range(len(sample))])
-        print(sample.head(1))
+        sample[column] = sample.apply(lambda x: i, axis=1)
+
+        # Concatenate the sample dataframes
+        full_folds = pd.concat([full_folds, sample])
 
         logging.info(f"After fold {i}, there are {len(data)} samples to select from.")
+
+    full_folds.sort_index(inplace=True)
+    return full_folds
 
 
 def main(args: argparse.Namespace):
