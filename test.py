@@ -1,101 +1,100 @@
 # Experiment with setting up models for pleonasm detection
 # Created by Alejandro Ciuba, alejandrociuba@pitt.edu
 from pathlib import Path
-from transformers import AutoProcessor, Llama4ForConditionalGeneration
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import (
+    AutoProcessor, 
+    BitsAndBytesConfig,
+    Llama4ForConditionalGeneration,
+    )
 from logger import make_loggers
 
 import argparse
+import datetime
 import logging
 import torch
 import transformers
 
 
+def load_token(file: Path | str) -> str:
+
+    try:
+        with open(file=file, mode='r') as src:
+            token = src.readline().strip()
+    except Exception as e:
+        raise e
+
+    return token
+
+
 def main(args: argparse.Namespace):
 
-    model_id = "meta-llama/Llama-4-Scout-17B-16E-Instruct"
+    log, err = make_loggers("logs/runs/test-run.log", "logs/errors/test-err.log", levels=[logging.INFO, logging.ERROR])
+
+    token:str = ""
+    try:
+        token = load_token(args.api)
+    except Exception as e:
+        err.error(e, exc_info=True)
+        exit()
+
+    model_name = "Qwen/Qwen3-8B"
+
+    RUN_INFO = f"""RUN: {args.metadata}\n\tMODEL: {model_name}\n\tDATASET: TEST INPUT"""
+    log.info(RUN_INFO)
+
+    log.info(f"\n\tDEVICES: {[torch.cuda.device(i) for i in range(torch.cuda.device_count())]}")
+
+    # load the tokenizer and the model
+    tokenizer = AutoTokenizer.from_pretrained(model_name, token=token)
+    model = AutoModelForCausalLM.from_pretrained(
+        model_name,
+        torch_dtype="auto",
+        device_map="auto",
+        token=token
+    )
+    log.info("Model is loaded from pretrained")
+
+    # prepare the model input
+    prompt = "Identify the pleonasm in the following sentence: \"We have thoughtfully thought about your situation.\" Output your response in the following JSON format: \{\"pleonasm\": \"<SENTENCE>\"\}."
+    log.info(prompt)
 
     messages = [
-        {"role": "user", "content": "Identify the pleonasm in this sentence: \"This is a free gift.\""},
+        {"role": "user", "content": prompt}
     ]
 
-    print(messages)
-    print([torch.cuda.device(i) for i in range(torch.cuda.device_count())])
-
-    pipe = transformers.pipeline(
-        "text-generation",
-        model=model_id,
-        device_map="auto",
-        model_kwargs={"torch_dtype": torch.bfloat16},
+    text = tokenizer.apply_chat_template(
+        messages,
+        tokenize=False,
+        add_generation_prompt=True,
+        enable_thinking=True # Switches between thinking and non-thinking modes. Default is True.
     )
 
-    print("Model is past the pipeline stage, running")
+    model_inputs = tokenizer([text], return_tensors="pt").to(model.device)
 
-    output = pipe(messages, do_sample=False, max_new_tokens=200)
+    # conduct text completion
+    generated_ids = model.generate(
+        **model_inputs,
+        max_new_tokens=32768
+    )
+    output_ids = generated_ids[0][len(model_inputs.input_ids[0]):].tolist() 
 
-    print("Model has been inferenced")
-    print(output[0]["generated_text"][-1]["content"])
+    log.info("Outputs received")
 
-    # model_id = "meta-llama/Llama-3.1-8B"
+    # parsing thinking content
+    index = 0
+    try:
+        # rindex finding 151668 (</think>)
+        index = len(output_ids) - output_ids[::-1].index(151668)
+    except ValueError:
+        index = 0
 
-    # pipeline = transformers.pipeline(
-    #     "text-generation", model=model_id, model_kwargs={"torch_dtype": torch.bfloat16}, device_map="auto"
-    # )
+    thinking_content = tokenizer.decode(output_ids[:index], skip_special_tokens=True).strip("\n")
+    content = tokenizer.decode(output_ids[index:], skip_special_tokens=True).strip("\n")
 
-    # print(pipeline("""Can you tell me which word is a pleonasm in the following sentence? \"This is a free gift.\"}"""))
-
-    # log, err = make_loggers(Path("./logs/runs/test-run.log"), Path("./logs/errors/test-err.log"),
-    #                         levels=[logging.INFO, logging.ERROR])
-    
-    # log.info(f"METADATA: {args.metadata}")
-    # logging.info(f"METADATA: {args.metadata}")
-
-    # model_id = "meta-llama/Llama-4-Maverick-17B-128E-Instruct"
-
-    # processor = AutoProcessor.from_pretrained(model_id)
-    # model = Llama4ForConditionalGeneration.from_pretrained(
-    #     model_id,
-    #     attn_implementation="flex_attention",
-    #     device_map="auto",
-    #     torch_dtype=torch.bfloat16,
-    # )
-
-    # # url1 = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/0052a70beed5bf71b92610a43a52df6d286cd5f3/diffusers/rabbit.jpg"
-    # # url2 = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/datasets/cat_style_layout.png"
-    # messages = \
-    # [
-    #     {
-    #         "role": "user",
-    #         "content": 
-    #         [
-    #             {"type": "text", 
-    #              "text": 
-    #              """Can you tell me which word is a pleonasm in the following sentence?
-    #              \"This is a free gift.\"
-    #              Output your results in the following JSON format:
-    #              \{\"pleonasm\": <WORD>\}
-    #              """,
-    #             },
-    #         ],
-    #     },
-    # ]
-
-    # inputs = processor.apply_chat_template(
-    #     messages,
-    #     add_generation_prompt=True,
-    #     tokenize=True,
-    #     return_dict=True,
-    #     return_tensors="pt",
-    # ).to(model.device)
-
-    # outputs = model.generate(
-    #     **inputs,
-    #     max_new_tokens=256,
-    # )
-
-    # response = processor.batch_decode(outputs[:, inputs["input_ids"].shape[-1]:])[0]
-    # log.info(response)
-    # log.info(outputs[0])
-    # log.info(type(outputs))
+    log.info(f"thinking content: {thinking_content}")
+    log.info(f"content: {content}")
+    log.info(f"TIME COMPLETED: {datetime.datetime.now()}")
 
 
 def add_args(parser: argparse.ArgumentParser):
@@ -105,7 +104,15 @@ def add_args(parser: argparse.ArgumentParser):
         "--metadata",
         nargs="*",
         default="TEST RUN",
-        help="Metadata used to identify the run in logs.",
+        help="Metadata used to identify the run in logs (experiment name).",
+    )
+
+    parser.add_argument(
+        "-a",
+        "--api",
+        required=True,
+        type=Path,
+        help="File path to API access token for HuggingFace."
     )
 
 
