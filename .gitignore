@@ -211,3 +211,9 @@ data/
 
 # Logs
 logs/
+
+# CRC scripts
+crc/
+
+# API tokens
+tokens/
