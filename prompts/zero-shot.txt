@@ -1,0 +1,10 @@
+You are detecting semantic pleonasms in customer reviews.
+
+### Task:
+'''{task}'''
+
+### Customer Review:
+'''{review}'''
+
+After identifying the pleonasm in the sentence, output the response in the following JSON format:
+'''{format}'''
