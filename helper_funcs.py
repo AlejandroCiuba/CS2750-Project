@@ -68,3 +68,25 @@ def full_sentence(row: pd.Series) -> list[str]:
         return f"{before.strip()} {after.strip()}"
     else:
         return f"{before.strip()} {pleonasm.strip()} {after.strip()}"
+    
+# Assumes full sentences have been made and that the column is called 'review'
+def few_shot(row: pd.Series, sample_pool: pd.DataFrame, examples: int = 4):
+    """
+    Assumes full sentences have been made and that they are under the 'review' column.
+    """
+
+    samples = sample_pool.sample(examples)
+
+    preamble = "In the sentence:"
+    fewshot = """"""
+    for sample in samples.itertuples():
+
+        before, after, pleonasm = sample.before, sample.after, sample.consensus
+        if pleonasm == 'neither':
+            fewshot += f"'''{preamble} \"{before} {after}\", there are no pleonasms.'''\n"
+        elif pleonasm == 'both':
+            fewshot += f"'''{preamble} \"{before} {after}\", the pleonasms are {before.split(' ')[-1]} and {after.split(' ')[0]}.'''\n"
+        else:
+            fewshot += f"'''{preamble} \"{before} {pleonasm} {after}\", the pleonasm is {pleonasm}.'''\n"
+
+    return fewshot.strip()
