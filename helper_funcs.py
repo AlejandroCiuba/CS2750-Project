@@ -69,11 +69,8 @@ def full_sentence(row: pd.Series) -> list[str]:
     else:
         return f"{before.strip()} {pleonasm.strip()} {after.strip()}"
     
-# Assumes full sentences have been made and that the column is called 'review'
+# Cannot just get sentences from the 'review' column as we need to get both parts if there are two pleonasms.
 def few_shot(row: pd.Series, sample_pool: pd.DataFrame, examples: int = 4):
-    """
-    Assumes full sentences have been made and that they are under the 'review' column.
-    """
 
     samples = sample_pool.sample(examples)
 

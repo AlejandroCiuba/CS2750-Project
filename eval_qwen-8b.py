@@ -5,6 +5,7 @@ from helper_funcs import (
     load_token,
     to_save,
     full_sentence,
+    few_shot,
     )
 from make_prompts import iter_prompt
 from pathlib import Path
@@ -36,11 +37,16 @@ def main(args: argparse.Namespace):
 
     # Set up dataset
     data = pd.read_json(args.data, lines=True)
+
+    rest = data[data['fold'] != args.fold]
     test = data[data['fold'] == args.fold]
 
     test['review'] = test.apply(full_sentence, axis=1)
     test['task'] = test.apply(lambda x: "Identify the pleonasm in the customer review.", axis=1)
     test['format'] = test.apply(lambda x: "{\"pleonasm\": \"<WORD>\"}", axis=1)
+
+    if args.examples != 0:
+        test['examples'] = test.apply(few_shot, axis=1, args=(rest, args.examples))
 
     # load the tokenizer and the model
     model_name = "Qwen/Qwen3-8B"
@@ -67,47 +73,56 @@ def main(args: argparse.Namespace):
     # log.info(prompt)
 
     # Evaluate model
-    for prompt in tqdm(iter_prompt(template=args.template, data=test), desc="Running model on corpus"):
+    try:
+        for prompt in tqdm(iter_prompt(template=args.template, data=test, return_metadata=False if args.examples == 0 else True), desc="Running model on corpus"):
 
-        messages = [
-            {"role": "user", "content": prompt}
-        ]
+            messages = []
+            if args.examples == 0:
+                messages = [
+                    {"role": "user", "content": prompt}
+                ]
 
-        text = tokenizer.apply_chat_template(
-            messages,
-            tokenize=False,
-            add_generation_prompt=True,
-            enable_thinking=True # Switches between thinking and non-thinking modes. Default is True.
-        )
+            else:
 
-        model_inputs = tokenizer([text], return_tensors="pt").to(model.device)
+                messages = [
+                    {"role": "user", "content": prompt[0]}
+                ]
+                log.info(f"Review: {prompt[1]}\nExamples: {prompt[2]}\n")
 
-        # conduct text completion
-        generated_ids = model.generate(
-            **model_inputs,
-            max_new_tokens=32768
-        )
-        output_ids = generated_ids[0][len(model_inputs.input_ids[0]):].tolist()
+            text = tokenizer.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=True,
+                enable_thinking=True # Switches between thinking and non-thinking modes. Default is True.
+            )
 
-        # parsing thinking content
-        index = 0
-        try:
-            # rindex finding 151668 (</think>)
-            index = len(output_ids) - output_ids[::-1].index(151668)
-        except ValueError:
+            model_inputs = tokenizer([text], return_tensors="pt").to(model.device)
+
+            # conduct text completion
+            generated_ids = model.generate(
+                **model_inputs,
+                max_new_tokens=32768
+            )
+            output_ids = generated_ids[0][len(model_inputs.input_ids[0]):].tolist()
+
+            # parsing thinking content
             index = 0
+            try:
+                # rindex finding 151668 (</think>)
+                index = len(output_ids) - output_ids[::-1].index(151668)
+            except ValueError:
+                index = 0
 
-        thinking_content = tokenizer.decode(output_ids[:index], skip_special_tokens=True).strip("\n")
-        content = tokenizer.decode(output_ids[index:], skip_special_tokens=True).strip("\n")
+            thinking_content = tokenizer.decode(output_ids[:index], skip_special_tokens=True).strip("\n")
+            content = tokenizer.decode(output_ids[index:], skip_special_tokens=True).strip("\n")
 
-        # log.info(f"thinking content: {thinking_content}")
-        # log.info(f"content: {content}")
-
-        try:
+            # log.info(f"thinking content: {thinking_content}")
+            # log.info(f"content: {content}")
             to_save(args.save, content, overwrite=False)
-        except Exception as e:
-            err.error(e, exc_info=True)
-            exit()
+
+    except Exception as e:
+        err.error(e, exc_info=True)
+        exit()
 
     log.info(f"SAVED TO: {args.save}")
     log.info(f"TIME COMPLETED: {datetime.datetime.now()}")

@@ -15,7 +15,7 @@ def make_prompt(template: Path | str, **kwargs) -> str:
     return PromptTemplate.from_template(template=text).format(**kwargs)
 
 
-def iter_prompt(template: Path | str, data: pd.DataFrame):
+def iter_prompt(template: Path | str, data: pd.DataFrame, return_metadata: bool = False):
 
     text = """"""
     try:
@@ -27,7 +27,7 @@ def iter_prompt(template: Path | str, data: pd.DataFrame):
     prompt = PromptTemplate.from_template(template=text)
 
     for row in data.to_dict(orient='records'):
-        yield prompt.format(**row)
+        yield prompt.format(**row) if not return_metadata else prompt.format(**row), row.review, row.examples
 
 
 if __name__ == "__main__":
@@ -40,7 +40,6 @@ if __name__ == "__main__":
         else:
             return f"{before.strip()} {pleonasm.strip()} {after.strip()}"
 
-    # Assumes full sentences have been made and that the column is called 'review'
     def few_shot(row: pd.Series, sample_pool: pd.DataFrame, examples: int = 4):
 
         samples = sample_pool.sample(examples)
