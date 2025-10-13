@@ -39,7 +39,7 @@ def main(args: argparse.Namespace):
     data = pd.read_json(args.data, lines=True)
 
     rest = data[data['fold'] != args.fold]
-    test = data[data['fold'] == args.fold]
+    test = data[data['fold'] == args.fold].copy()
 
     test['review'] = test.apply(full_sentence, axis=1)
     test['task'] = test.apply(lambda x: "Identify the pleonasm in the customer review.", axis=1)
@@ -74,20 +74,16 @@ def main(args: argparse.Namespace):
 
     # Evaluate model
     try:
-        for prompt in tqdm(iter_prompt(template=args.template, data=test, return_metadata=False if args.examples == 0 else True), desc="Running model on corpus"):
+        for prompt in tqdm(iter_prompt(template=args.template, data=test), desc="Running model on corpus"):
 
-            messages = []
-            if args.examples == 0:
-                messages = [
-                    {"role": "user", "content": prompt}
-                ]
+            messages = [
+                {"role": "user", "content": prompt[0]}
+            ]
 
+            if args.examples != 0:
+                log.info(f"REVIEW: {prompt[1]}\nEXAMPLES: {prompt[2]}\n")
             else:
-
-                messages = [
-                    {"role": "user", "content": prompt[0]}
-                ]
-                log.info(f"Review: {prompt[1]}\nExamples: {prompt[2]}\n")
+                log.info(f"REVIEW: {prompt[1]}")
 
             text = tokenizer.apply_chat_template(
                 messages,
@@ -116,9 +112,11 @@ def main(args: argparse.Namespace):
             thinking_content = tokenizer.decode(output_ids[:index], skip_special_tokens=True).strip("\n")
             content = tokenizer.decode(output_ids[index:], skip_special_tokens=True).strip("\n")
 
+            entry = "{\"review\": \"%s\", \"real\": [%s], \"output\": %s}" % (prompt[1], prompt[-1], content)
+
             # log.info(f"thinking content: {thinking_content}")
             # log.info(f"content: {content}")
-            to_save(args.save, content, overwrite=False)
+            to_save(args.save, entry, overwrite=False)
 
     except Exception as e:
         err.error(e, exc_info=True)

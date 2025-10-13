@@ -15,7 +15,7 @@ def make_prompt(template: Path | str, **kwargs) -> str:
     return PromptTemplate.from_template(template=text).format(**kwargs)
 
 
-def iter_prompt(template: Path | str, data: pd.DataFrame, return_metadata: bool = False):
+def iter_prompt(template: Path | str, data: pd.DataFrame):
 
     text = """"""
     try:
@@ -27,7 +27,18 @@ def iter_prompt(template: Path | str, data: pd.DataFrame, return_metadata: bool 
     prompt = PromptTemplate.from_template(template=text)
 
     for row in data.to_dict(orient='records'):
-        yield prompt.format(**row) if not return_metadata else prompt.format(**row), row.review, row.examples
+
+        if row['consensus'] == 'neither':
+            pleonasm = 'NONE'
+        elif row['consensus'] == 'both':
+            pleonasm = f"\"{row['before'].split(' ')[-1]}\", \"{row['after'].split(' ')[0]}\""
+        else:
+            pleonasm = row['consensus']
+
+        if 'examples' in row.keys():
+            yield prompt.format(**row), row['review'], row['examples'], pleonasm
+        else:
+            yield prompt.format(**row), row['review'], pleonasm
 
 
 if __name__ == "__main__":
