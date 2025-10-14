@@ -42,7 +42,7 @@ def main(args: argparse.Namespace):
     test = data[data['fold'] == args.fold].copy()
 
     test['review'] = test.apply(full_sentence, axis=1)
-    test['task'] = test.apply(lambda x: "Identify the pleonasm in the customer review.", axis=1)
+    test['task'] = test.apply(lambda x: "Identify the pleonasm in the customer review, write NONE if there are no pleonasms.", axis=1)
     test['format'] = test.apply(lambda x: "{\"pleonasm\": \"<WORD>\"}", axis=1)
 
     if args.examples != 0:

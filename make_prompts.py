@@ -29,11 +29,11 @@ def iter_prompt(template: Path | str, data: pd.DataFrame):
     for row in data.to_dict(orient='records'):
 
         if row['consensus'] == 'neither':
-            pleonasm = 'NONE'
+            pleonasm = "\"NONE\""
         elif row['consensus'] == 'both':
             pleonasm = f"\"{row['before'].split(' ')[-1]}\", \"{row['after'].split(' ')[0]}\""
         else:
-            pleonasm = row['consensus']
+            pleonasm = f"\"{row['consensus']}\""
 
         if 'examples' in row.keys():
             yield prompt.format(**row), row['review'], row['examples'], pleonasm
