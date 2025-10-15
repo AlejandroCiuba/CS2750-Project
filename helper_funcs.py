@@ -60,29 +60,3 @@ def to_save(file: Path | str, contents: str | list[str], overwrite: bool = False
             
     except Exception as e:
             raise e
-
-
-def full_sentence(row: pd.Series) -> list[str]:
-    before, after, first, second = row.before, row.after, row['first'], row.second
-    return f"{before} {first} {second} {after}"
-    
-# Cannot just get sentences from the 'review' column as we need to get both parts if there are two pleonasms.
-def few_shot(row: pd.Series, sample_pool: pd.DataFrame, examples: int = 4):
-
-    samples = sample_pool.sample(examples)
-
-    preamble = "In the sentence:"
-    fewshot = """"""
-    for sample in samples.itertuples():
-
-        before, after, first, second, pleonasm = sample.before, sample.after, sample.first, sample.second, sample.consensus
-        sentence = f"{before} {first} {second} {after}"
-
-        if pleonasm == 'neither':
-            fewshot += f"'''{preamble} \"{sentence}\", there are no pleonasms.'''\n"
-        elif pleonasm == 'both':
-            fewshot += f"'''{preamble} \"{sentence}\", the pleonasms are {first} and {second}.'''\n"
-        else:
-            fewshot += f"'''{preamble} \"{sentence}\", the pleonasm is {pleonasm}.'''\n"
-
-    return fewshot.strip()

@@ -4,10 +4,12 @@ from helper_funcs import (
     make_loggers,
     load_token,
     to_save,
+    )
+from make_prompts import (
+    iter_prompt,
     full_sentence,
     few_shot,
     )
-from make_prompts import iter_prompt
 from pathlib import Path
 from tqdm import tqdm
 from transformers import (
