@@ -1,5 +1,9 @@
 # Experiment with setting up models for pleonasm detection
 # Created by Alejandro Ciuba, alejandrociuba@pitt.edu
+from baselines import (
+    load_model,
+    prompt_model
+)
 from helper_funcs import (
     make_loggers,
     load_token,
@@ -51,16 +55,13 @@ def main(args: argparse.Namespace):
         test['examples'] = test.apply(few_shot, axis=1, args=(rest, args.examples))
 
     # load the tokenizer and the model
-    model_name = "Qwen/Qwen3-8B"
-    tokenizer = AutoTokenizer.from_pretrained(model_name, token=token)
-    model = AutoModelForCausalLM.from_pretrained(
-        model_name,
-        torch_dtype="auto",
-        device_map="auto",
-        token=token
-    )
+    try:
+        model, tokenizer = load_model(name=args.name, token=token)
+    except Exception as e:
+        err.error(e, exec_info=True)
+        exit()
 
-    RUN_INFO = f"""\nRUN: {args.metadata}\n\tMODEL: {model_name}\n\tDATASET: {args.data}\n\tX-SHOT: {args.examples if args.examples != -1 else 0}\n\tTEST FOLD: {args.fold}\n\tTEMPLATE: {args.template}\n"""
+    RUN_INFO = f"""\nRUN: {args.metadata}\n\tMODEL: {args.name}\n\tDATASET: {args.data}\n\tX-SHOT: {args.examples if args.examples != -1 else 0}\n\tTEST FOLD: {args.fold}\n\tTEMPLATE: {args.template}\n"""
     log.info(RUN_INFO)
 
     log.info(f"\n\tDEVICES: {[torch.cuda.device(i) for i in range(torch.cuda.device_count())]}")
@@ -69,10 +70,7 @@ def main(args: argparse.Namespace):
 
     # prepare the model input
 
-    log.info(f"Running {args.data} on {model_name}")
-
-    # prompt = "Identify the pleonasm in the following sentence: \"We have thoughtfully thought about your situation.\" Output your response in the following JSON format: \{\"pleonasm\": \"<PLEONASM>\"\}."
-    # log.info(prompt)
+    log.info(f"Running {args.data} on {args.name}")
 
     # Evaluate model
     try:
@@ -87,37 +85,11 @@ def main(args: argparse.Namespace):
             else:
                 log.info(f"REVIEW: {prompt[1]}")
 
-            text = tokenizer.apply_chat_template(
-                messages,
-                tokenize=False,
-                add_generation_prompt=True,
-                enable_thinking=True # Switches between thinking and non-thinking modes. Default is True.
-            )
 
-            model_inputs = tokenizer([text], return_tensors="pt").to(model.device)
-
-            # conduct text completion
-            generated_ids = model.generate(
-                **model_inputs,
-                max_new_tokens=32768
-            )
-            output_ids = generated_ids[0][len(model_inputs.input_ids[0]):].tolist()
-
-            # parsing thinking content
-            index = 0
-            try:
-                # rindex finding 151668 (</think>)
-                index = len(output_ids) - output_ids[::-1].index(151668)
-            except ValueError:
-                index = 0
-
-            thinking_content = tokenizer.decode(output_ids[:index], skip_special_tokens=True).strip("\n")
-            content = tokenizer.decode(output_ids[index:], skip_special_tokens=True).strip("\n")
+            content = prompt_model(name=args.name, messages=messages, model=model, tokenizer=tokenizer)
 
             entry = "{\"review\": \"%s\", \"real\": [%s], \"output\": %s}" % (prompt[1], prompt[-1], content)
 
-            # log.info(f"thinking content: {thinking_content}")
-            # log.info(f"content: {content}")
             to_save(args.save, entry, overwrite=False)
 
     except Exception as e:
@@ -133,9 +105,16 @@ def add_args(parser: argparse.ArgumentParser):
     parser.add_argument(
         "-m",
         "--metadata",
-        nargs="*",
         default="TEST RUN",
         help="Metadata used to identify the run in logs (experiment name).",
+    )
+
+    parser.add_argument(
+        "-n",
+        "--name",
+        required=True,
+        type=str,
+        help="Model name.",
     )
 
     parser.add_argument(
@@ -199,9 +178,9 @@ def add_args(parser: argparse.ArgumentParser):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(
-        prog="eval_qwen-8b.py",
+        prog="run_baseline.py",
         formatter_class=argparse.RawTextHelpFormatter,
-        description="Run SPC on QWEN-8B.",
+        description="Run SPC on the specified model.",
         epilog="Created by Alejandro Ciuba, alc307@pitt.edu",
     )
 

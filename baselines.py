@@ -1,77 +1,83 @@
-import json, numpy as np
+# Calls the models we are using as baselines
+# Created by Alejandro Ciuba, alejandrociuba@pitt.edu
 from pathlib import Path
-import pandas as pd
+from transformers import (
+    AutoModelForCausalLM, 
+    AutoTokenizer,
+    GenerationConfig,
+    )
 
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.model_selection import StratifiedKFold, cross_val_score
-from sklearn.naive_bayes import MultinomialNB
-from sklearn.linear_model import LogisticRegression
-from sklearn.pipeline import Pipeline
-from sklearn.feature_selection import SelectPercentile, chi2
+import logging
+import torch
+
+def load_model(name: str, token: Path | str, **kwargs):
 
 
-HERE = Path(__file__).resolve().parent     
-DATA_PATH = HERE / "SPC.json"               
-df = pd.read_json(DATA_PATH, lines=True)
-x=[]
-y=[]
-for idx, row in df.iterrows():
-    sentence = f"{row['before']} {row['first']} {row['second']} {row['after']}"
-    sentence = " ".join(sentence.split())  
-    if row['consensus']=='neither':
-        i=0
-    else:
-        i=1
-    x.append(sentence)
-    y.append(i)
+    model, tokenizer = None, None
+    if name == "Qwen/Qwen3-8B":
+
+        tokenizer = AutoTokenizer.from_pretrained(name, token=token)
+        model = AutoModelForCausalLM.from_pretrained(
+            name,
+            torch_dtype="auto",
+            device_map="auto",
+            token=token
+            )
+
+    elif name == "deepseek-ai/deepseek-llm-7b-chat":
+
+        tokenizer = AutoTokenizer.from_pretrained(name, token=token)
+        model = AutoModelForCausalLM.from_pretrained(
+            name,
+            torch_dtype=torch.bfloat16,
+            device_map="auto",
+            token=token
+            )
+        model.generation_config = GenerationConfig.from_pretrained(name, token=token)
+        model.generation_config.pad_token_id = model.generation_config.eos_token_id
     
+    if model is None or tokenizer is None:
+        raise TypeError("No matching model name.")
+
+    return model, tokenizer
 
 
-tfidf_tri = TfidfVectorizer(
-    analyzer="word",
-    ngram_range=(3, 3),
-    lowercase=True,
-    min_df=2,          
-    max_df=0.95,       
-    sublinear_tf=True  
-)
-    
-cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=47)
-selector = SelectPercentile(score_func=chi2, percentile=90)
+def prompt_model(name: str, messages: list, **kwargs):
 
+    if name == "Qwen/Qwen3-8B":
 
+        text = kwargs['tokenizer'].apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=True,
+                enable_thinking=True # Switches between thinking and non-thinking modes. Default is True.
+            )
 
-nb_pipe = Pipeline([
-    ("tfidf", tfidf_tri),
-    ("chi2", selector),
-    ("clf", MultinomialNB(alpha=0.1))  
-])
+        model_inputs = kwargs['tokenizer']([text], return_tensors="pt").to(kwargs['model'].device)
 
-nb_scores = cross_val_score(nb_pipe, x, y, cv=cv, scoring="accuracy", n_jobs=-1)
-print(f"Naive Bayes (TF-IDF trigrams) 5-fold accuracy: {nb_scores.mean():.4f} ± {nb_scores.std():.4f}")
+        # conduct text completion
+        generated_ids = kwargs['model'].generate(
+            **model_inputs,
+            max_new_tokens=32768
+        )
+        output_ids = generated_ids[0][len(model_inputs.input_ids[0]):].tolist()
 
+        # parsing thinking content
+        index = 0
+        try:
+            # rindex finding 151668 (</think>)
+            index = len(output_ids) - output_ids[::-1].index(151668)
+        except ValueError:
+            index = 0
 
+        thinking_content = kwargs['tokenizer'].decode(output_ids[:index], skip_special_tokens=True).strip("\n")
+        content = kwargs['tokenizer'].decode(output_ids[index:], skip_special_tokens=True).strip("\n")
 
+    elif name == "deepseek-ai/deepseek-llm-7b-chat":
 
+        input_tensor = kwargs['tokenizer'].apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt")
+        outputs = kwargs['model'].generate(input_tensor.to(kwargs['model'].device), max_new_tokens=100)
 
+        content = kwargs['tokenizer'].decode(outputs[0][input_tensor.shape[1]:], skip_special_tokens=True).strip("\n")
 
-maxent_pipe = Pipeline([
-    ("tfidf", tfidf_tri),
-    ("chi2", selector),
-    ("clf", LogisticRegression(
-        penalty="l2",           
-        C=1.0,                 
-        solver="liblinear",     
-        max_iter=500,
-        n_jobs=-1 if hasattr(LogisticRegression, "n_jobs") else None
-    ))
-])
-
-
-maxent_scores = cross_val_score(maxent_pipe, x, y, cv=cv, scoring="accuracy", n_jobs=-1)
-print(f"MaxEnt (LogReg, TF-IDF trigrams) 5-fold accuracy: {maxent_scores.mean():.4f} ± {maxent_scores.std():.4f}")
-
-
-
-
-
+    return content
