@@ -20,6 +20,7 @@ def main(args: argparse.Namespace):
 
     # Check each line of JSON
     correct = 0
+    binary_correct = 0  # Whether or not it guess that there is a pleonasm
     with open(args.output, 'r') as src:
         for line in src:
             try:
@@ -31,7 +32,11 @@ def main(args: argparse.Namespace):
             if str(obj['output']['pleonasm']).strip().lower() in [str(word).strip().lower() for word in obj['real']]:
                 correct += 1
 
-    logging.info(f"Accuracy: {correct/entries:.4f}")
+            if (str(obj['output']['pleonasm']).strip().lower() == "none" and "".join(obj['real']).strip().lower() == "none") \
+            or (str(obj['output']['pleonasm']).strip().lower() != "none" and "".join(obj['real']).strip().lower() != "none"):
+                binary_correct += 1
+
+    logging.info(f"Accuracy: {correct/entries:.4f}\nBinary Accuracy: {binary_correct/entries:.4f}")
 
 
 def add_args(parser: argparse.ArgumentParser):
