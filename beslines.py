@@ -38,22 +38,16 @@ tfidf_tri = TfidfVectorizer(
     
 cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=47)
 selector = SelectPercentile(score_func=chi2, percentile=90)
-model=MultinomialNB(alpha=0.1)
-
-
 
 
 
 nb_pipe = Pipeline([
     ("tfidf", tfidf_tri),
     ("chi2", selector),
-    ("clf", MultinomialNB(alpha=0.1)),
-    
-    
+    ("clf", MultinomialNB(alpha=0.1))  
 ])
 
 nb_scores = cross_val_score(nb_pipe, x, y, cv=cv, scoring="accuracy", n_jobs=-1)
-print(nb_scores)
 print(f"Naive Bayes (TF-IDF trigrams) 5-fold accuracy: {nb_scores.mean():.4f} ± {nb_scores.std():.4f}")
 
 
