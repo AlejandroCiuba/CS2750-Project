@@ -206,14 +206,16 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
-# Dataset
+# Dataset and models
+models/
 data/
 
 # Logs
 logs/
 
-# CRC scripts
+# Bash scripts
 crc/
+local/
 
 # API tokens
 tokens/
