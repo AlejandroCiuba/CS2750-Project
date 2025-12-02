@@ -22,3 +22,17 @@ class SENN(nn.Module):
         )
 
         self.bias = nn.Parameter(torch.zeros(1))
+
+    def theta(self, emb):
+        th = self.theta_net(emb)
+        if self.pos_theta:
+            return torch.softmax(th)    
+        return th
+
+    def forward(self, cvec, emb):
+
+        th = self.theta(emb)
+        out = cvec * th
+        logit = out.sum(dim=1, keepdim=True) + self.bias
+
+        return logit, cvec, th
