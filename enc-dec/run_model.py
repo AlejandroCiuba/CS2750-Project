@@ -147,7 +147,7 @@ def main(args: argparse.Namespace):
     log.info(f"\n\tDEVICES: {[torch.cuda.device(i) for i in range(torch.cuda.device_count())]}")
 
     # Load the model
-    encoder, decoder = create_model(len(train_dataset.tokenizer), 128, 128, 1, train_dataset.max_sequence_len_y + 1, device)  # Add one to include the EOS token...
+    encoder, decoder = create_model(len(train_dataset.tokenizer), 512, 512, 1, train_dataset.max_sequence_len_y + 1, device)  # Add one to include the EOS token...
 
     enc_opt = torch.optim.Adam(encoder.parameters(), lr=args.learning_rate)
     dec_opt = torch.optim.Adam(decoder.parameters(), lr=args.learning_rate)
