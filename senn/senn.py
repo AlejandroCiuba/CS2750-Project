@@ -3,6 +3,8 @@ from torch import nn
 
 import torch
 
+import torch.nn.functional as F
+
 
 class SENN(nn.Module):
 
@@ -26,7 +28,7 @@ class SENN(nn.Module):
     def theta(self, emb):
         th = self.theta_net(emb)
         if self.pos_theta:
-            return torch.softmax(th)    
+            return F.softplus(th)
         return th
 
     def forward(self, cvec, emb):
@@ -35,4 +37,10 @@ class SENN(nn.Module):
         out = cvec * th
         logit = out.sum(dim=1, keepdim=True) + self.bias
 
-        return logit, cvec, th
+        return logit.squeeze(), cvec, th
+    
+
+if __name__ == "__main__":
+
+    test = SENN(50, 50, 2)
+    print(F.sigmoid(test(torch.randn((32, 50)), torch.randn((32, 50)))[0]))

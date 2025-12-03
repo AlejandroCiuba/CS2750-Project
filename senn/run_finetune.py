@@ -1,9 +1,7 @@
 # Self-Explainable Neural Network
 # Created by Alejandro Ciuba, alejandrociuba@pitt.edu
-from gensim.models import KeyedVectors
 from logger import make_loggers
 from pathlib import Path
-from senn import SENN
 from sklearn.metrics import classification_report
 from torch.utils.data import (
     Dataset,
@@ -30,54 +28,36 @@ import pandas as pd
 
 def train(model,
           optim: torch.optim.Optimizer, sched: torch.optim.lr_scheduler.LambdaLR,
-          encoder, optim_enc: torch.optim.Optimizer, crit,
           data: DataLoader, epochs: int,
           logger: logging.Logger):
 
     for epoch in tqdm(range(1, epochs + 1), desc="Training..."):
         tl = 0.0
-        tle = 0.0
-        for batch, cvec in data:
-
-            # Train the parameterizer
+        for batch in data:
             optim.zero_grad()
             outputs = model(**batch)
-            # loss = outputs.loss
-            # loss.backward()
-            
- 
-
-            # Train the encoder
-            optim_enc.zero_grad()
-            outputs, _, _ = encoder(cvec, outputs.logits)
-            loss_enc = crit(outputs, batch['labels'].float())
-            loss_enc.backward()
+            loss = outputs.loss
+            loss.backward()
             optim.step()
-            optim_enc.step()
-            # sched.step()
+            sched.step()
         
-        # tl += loss.item()
-        tle += loss_enc.item()
-        logger.info(f"{epoch}/{epochs}: ({tle / len(data):0.5f} {loss_enc.item()})")
+        tl += loss.item()
+        logger.info(f"{epoch}/{epochs}: {tl / len(data):0.5f} {loss.item()}")
 
 
-def evaluate(model, encoder, data: DataLoader, logger: logging.Logger):
+def evaluate(model, data: DataLoader, logger: logging.Logger):
     with torch.no_grad():
         preds, true = [], []
-        for batch, cvec in tqdm(data, desc="Evaluating..."):
+        for batch in tqdm(data, desc="Evaluating..."):
 
-            outputs = torch.nn.functional.sigmoid(encoder(cvec, model(**batch).logits)[0])
+            outputs = model(**batch)
+            logits = outputs.logits
 
-            pred:torch.Tensor = torch.where(outputs >= 0.5, 1.0, 0.0)  # topk produces a list [probabilities, inds]
+            pred:torch.Tensor = torch.softmax(logits, dim=-1).topk(1)[1]  # topk produces a list [probabilities, inds]
             preds.extend(pred.cpu().numpy())
             true.extend(batch['labels'].cpu().numpy())
 
     logger.info(f"\n{classification_report(true, preds, digits=5)}")
-
-
-def fetch_gensim(path: Path) -> KeyedVectors:
-    return KeyedVectors.load_word2vec_format(path, binary=True)
-
 
 def main(args: argparse.Namespace):
 
@@ -114,35 +94,9 @@ def main(args: argparse.Namespace):
     model, tokenizer = helper.fetch_model(args.name, token)
     model.to(DEVICE)
 
-    encoder = SENN(concept_dim=3, emb_size=2, hidden=8)
-    encoder.to(DEVICE)
-
-    try:
-        vecs = fetch_gensim(args.gensim)
-    except Exception as e:
-        err.error(e, exc_info=True)
-        exit()    
-
-    log.info("GENSIM MODEL LOADED...")
-
     # Set up datasets
-
-    concept = concepts.cosine_similarity_between_neighbors
-    concept_args = {
-        'embeddings': vecs,
-        'top_k': 3,
-    }
-
-    train_dataset = helper.BinLangDatasetSENN(
-        train_df, key=lambda y: 0.0 if y == "" else 1.0, 
-        tokenizer=tokenizer, device=DEVICE,
-        concept=concept, concept_args=concept_args, concept_size=3,
-        )
-    test_dataset = helper.BinLangDatasetSENN(
-        test_df, key=lambda y: 0.0 if y == "" else 1.0, 
-        tokenizer=tokenizer, device=DEVICE,
-        concept=concept, concept_args=concept_args, concept_size=3,
-        )
+    train_dataset = helper.BinLangDataset(train_df, key=lambda y: 0 if y == "" else 1, tokenizer=tokenizer, device=DEVICE)
+    test_dataset = helper.BinLangDataset(test_df, key=lambda y: 0 if y == "" else 1, tokenizer=tokenizer, device=DEVICE)
 
     train_dl = DataLoader(train_dataset, sampler=RandomSampler(train_dataset), batch_size=args.batch_size)
     test_dl = DataLoader(test_dataset, batch_size=args.batch_size)  
@@ -153,9 +107,6 @@ def main(args: argparse.Namespace):
         num_training_steps=len(train_dl) * args.epochs,
         num_warmup_steps=0.1 * len(train_dl) * args.epochs,
     )
-
-    optim_enc = AdamW(params=encoder.parameters(), lr=args.learning_rate)
-    criterion_enc = torch.nn.BCEWithLogitsLoss()
 
     RUN_INFO = textwrap.dedent(
         f"""
@@ -173,14 +124,13 @@ def main(args: argparse.Namespace):
 
     try:
         train(model=model, optim=optim, sched=sched,
-              encoder=encoder, optim_enc=optim_enc, crit=criterion_enc,
             data=train_dl, epochs=args.epochs, logger=log)
     except Exception as e:
         err.error(e, exc_info=True)
         exit()    
     
     try:
-        evaluate(model=model, encoder=encoder, data=test_dl, logger=log)
+        evaluate(model=model, data=test_dl, logger=log)
     except Exception as e:
         err.error(e, exc_info=True)
         exit()
@@ -234,14 +184,6 @@ def add_args(parser: argparse.ArgumentParser):
         type=str,
         default="NONE",
         help="Concept to apply within the SENN; NONE will result in the addition of two more linear layers.",
-    )
-
-    parser.add_argument(
-        "-g",
-        "--gensim",
-        type=Path,
-        required=True,
-        help="Path to the gensim model for word vectors.",
     )
 
     parser.add_argument(

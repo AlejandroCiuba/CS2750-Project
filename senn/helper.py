@@ -15,7 +15,7 @@ import torch
 import pandas as pd
 
 
-class BinaryLangDataset(Dataset):
+class BinLangDataset(Dataset):
 
     def __init__(self, target_pairs: pd.DataFrame, key,
                   tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast, 
@@ -46,6 +46,26 @@ class BinaryLangDataset(Dataset):
         item = {k: v.squeeze(0).to(self.device) for k, v in enc.items()}
         item["labels"] = torch.tensor(self.key(self.y[ind]), dtype=torch.long).to(self.device)
         return item
+
+
+class BinLangDatasetSENN(BinLangDataset):
+
+        def __init__(self, target_pairs: pd.DataFrame, key,
+                  tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast, 
+                  max_len: int = 128, concept = None, concept_args: dict = None, concept_size: int = 3, device="cpu"):
+
+            super().__init__(target_pairs, key, tokenizer, max_len, device)
+            self.concept = concept
+
+            if self.concept != None:
+                self.K = concept_size
+                self.concept_args = concept_args
+
+        def __getitem__(self, ind):
+            item = super().__getitem__(ind)
+            convec: torch.Tensor = self.concept([self.X[ind]], **self.concept_args)
+            return item, convec.to(self.device)
+
 
 
 def fetch_model(name: str, token: str) \
