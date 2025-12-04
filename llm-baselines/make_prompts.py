@@ -97,7 +97,7 @@ if __name__ == "__main__":
     df = pd.read_json("../data/SPC-FOLD/SPC.json", lines=True)
     df['review'] = df.apply(full_sentence, axis=1)
 
-    vecs = KeyedVectors.load_word2vec_format("../../../google_vectors/GoogleNews-vectors-negative300.bin", binary=True)
+    vecs = KeyedVectors.load_word2vec_format("PATH", binary=True)
 
     rest = df[df['fold'] != 0]
     test = df[df['fold'] == 0].sample(10, random_state=50)

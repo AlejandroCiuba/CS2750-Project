@@ -82,6 +82,10 @@ def main(args: argparse.Namespace):
 
     RUN_INFO = f"""\nRUN: {args.metadata}\n\tMODEL: {args.name}\n\tDATASET: {args.data}\n\tX-SHOT: {args.examples if args.examples != -1 else 0}\n\tTEST FOLD: {args.fold}\n\tTEMPLATE: {args.template}\n"""
     log.info(RUN_INFO)
+
+    if args.linguistic_feature != "none":
+        log.info(f"\n\tLINGUISTIC FEATURE: {args.linguistic_feature}")
+
     log.info(f"\n\tDEVICES: {[torch.cuda.device(i) for i in range(torch.cuda.device_count())]}")
 
     log.info("Model is loaded from pretrained")
