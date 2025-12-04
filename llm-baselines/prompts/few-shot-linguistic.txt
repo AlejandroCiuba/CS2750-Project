@@ -1,7 +1,5 @@
 You are detecting semantic pleonasms in customer reviews.
 
-We are also giving you {linguistic_feature} to help.
-
 Here are some examples of pleonasms:
 {examples}
 
@@ -10,6 +8,8 @@ Here are some examples of pleonasms:
 
 ### Customer Review:
 '''{review}'''
+
+You are also given {linguistic_feature}.
 
 After identifying the pleonasm in the sentence, output the response in the following JSON format:
 '''{format}'''

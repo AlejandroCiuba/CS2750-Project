@@ -8,5 +8,7 @@ We are also giving you {linguistic_feature} to help.
 ### Customer Review:
 '''{review}'''
 
+You are also given {linguistic_feature}.
+
 After identifying the pleonasm in the sentence, output the response in the following JSON format:
 '''{format}'''

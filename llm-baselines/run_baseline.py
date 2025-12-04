@@ -4,6 +4,7 @@ from baselines import (
     load_model,
     prompt_model
 )
+from gensim.models import KeyedVectors
 from helper_funcs import (
     make_loggers,
     load_token,
@@ -13,6 +14,7 @@ from make_prompts import (
     iter_prompt,
     full_sentence,
     few_shot,
+    highest_cosine_similarity_between_neighbors
     )
 from pathlib import Path
 from tqdm import tqdm
@@ -51,8 +53,25 @@ def main(args: argparse.Namespace):
     test['task'] = test.apply(lambda x: "Identify the pleonasm in the customer review, write NONE if there are no pleonasms.", axis=1)
     test['format'] = test.apply(lambda x: "{\"pleonasm\": \"<WORD>\"}", axis=1)
 
+    vecs:KeyedVectors | None = None
+    if args.linguistic_feature in ["highest"]:
+        try:
+            vecs = KeyedVectors.load_word2vec_format(args.linguistic_path, binary=True)
+        except Exception as e:
+            err.error(e, exec_info=True)
+            exit()
+        test['linguistic_feature'] = test.apply(highest_cosine_similarity_between_neighbors, axis=1, embeddings=vecs)
+
     if args.examples != 0:
-        test['examples'] = test.apply(few_shot, axis=1, args=(rest, args.examples))
+        if args.linguistic_feature == "none":
+            test['examples'] = test.apply(few_shot, axis=1, sample_pool=rest, examples=4)
+        if args.linguistic_feature == "highest":
+            if vecs is None:
+                err.error("The option \"highest\" was given with no KeyedVector model path. Aborting...")
+                exit()
+            test['examples'] = test.apply(few_shot, axis=1, sample_pool=rest, examples=4, 
+                                          linguistic_feature=highest_cosine_similarity_between_neighbors, lf_kwargs={"embeddings": vecs})
+            del vecs
 
     # load the tokenizer and the model
     try:
@@ -63,7 +82,6 @@ def main(args: argparse.Namespace):
 
     RUN_INFO = f"""\nRUN: {args.metadata}\n\tMODEL: {args.name}\n\tDATASET: {args.data}\n\tX-SHOT: {args.examples if args.examples != -1 else 0}\n\tTEST FOLD: {args.fold}\n\tTEMPLATE: {args.template}\n"""
     log.info(RUN_INFO)
-
     log.info(f"\n\tDEVICES: {[torch.cuda.device(i) for i in range(torch.cuda.device_count())]}")
 
     log.info("Model is loaded from pretrained")
@@ -123,6 +141,22 @@ def add_args(parser: argparse.ArgumentParser):
         required=True,
         type=Path,
         help="File path to API access token for HuggingFace."
+    )
+
+    parser.add_argument(
+        "-x",
+        "--linguistic_feature",
+        type=str,
+        default="none",
+        help="The linguistic concept to give the model; defaults to \"none\"."
+    )
+
+    parser.add_argument(
+        "-v",
+        "--linguistic_path",
+        type=Path,
+        default=None,
+        help="Path to the file containing whatever is needed to get the linguistic features."
     )
 
     parser.add_argument(
