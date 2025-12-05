@@ -69,9 +69,10 @@ def main(args: argparse.Namespace):
             if vecs is None:
                 err.error("The option \"highest\" was given with no KeyedVector model path. Aborting...")
                 exit()
+            rest['review'] = rest.apply(full_sentence, axis = 1)
+            rest['linguistic_feature'] = rest.apply(highest_cosine_similarity_between_neighbors, axis=1, embeddings=vecs)
             test['examples'] = test.apply(few_shot, axis=1, sample_pool=rest, examples=4, 
                                           linguistic_feature=highest_cosine_similarity_between_neighbors, lf_kwargs={"embeddings": vecs})
-            del vecs
 
     # load the tokenizer and the model
     try:
