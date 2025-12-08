@@ -264,7 +264,7 @@ def add_args(parser: argparse.ArgumentParser):
         "-r",
         "--learning_rate",
         type=float,
-        default=1E-3,
+        default=1E-2,
         help="Batch size per forward pass, defaults to 32."
     )
 
